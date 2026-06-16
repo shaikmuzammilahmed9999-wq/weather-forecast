@@ -568,4 +568,446 @@
                     </div>
                     <div class="detail-card">
                         <div class="detail-icon">
+                            <i class="fas fa-temperature-low"></i>
+                        </div>
+                        <div class="detail-info">
+                            <h3>Feels Like</h3>
+                            <p id="feels-like">24°C</p>
+                        </div>
+                    </div>
+                    <div class="detail-card">
+                        <div class="detail-icon">
+                            <i class="fas fa-compress-arrows-alt"></i>
+                        </div>
+                        <div class="detail-info">
+                            <h3>Pressure</h3>
+                            <p id="pressure">1015 hPa</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
             
+            <div class="weather-card">
+                <h2 style="margin-bottom: 20px;">Weekly Forecast</h2>
+                <div class="forecast-container" id="forecast-container">
+                    <!-- Forecast cards will be generated here -->
+                </div>
+                
+                <div class="map-container">
+                    <div id="weather-map"></div>
+                    <div class="map-overlay">
+                        <h3 id="map-city">San Francisco</h3>
+                        <p id="map-temp">22°C</p>
+                        <p id="map-desc">Partly Cloudy</p>
+                    </div>
+                    <div class="map-controls">
+                        <button class="map-btn" id="zoom-in">
+                            <i class="fas fa-plus"></i>
+                        </button>
+                        <button class="map-btn" id="zoom-out">
+                            <i class="fas fa-minus"></i>
+                        </button>
+                        <button class="map-btn" id="locate-me">
+                            <i class="fas fa-location-arrow"></i>
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <div class="loading" id="loading" style="display: none;">
+            <div class="spinner"></div>
+            <p>Scanning atmospheric data...</p>
+        </div>
+        
+        <div class="error-message" id="error-message" style="display: none;">
+            <i class="fas fa-exclamation-triangle" style="font-size: 2rem; margin-bottom: 10px;"></i>
+            <h3>Location Not Found</h3>
+            <p>We couldn't find the location you searched for. Please try again.</p>
+        </div>
+    </div>
+
+    <script>
+        // Initialize particles.js
+        particlesJS('particles-js', {
+            particles: {
+                number: { value: 80, density: { enable: true, value_area: 800 } },
+                color: { value: "#00D4FF" },
+                shape: { type: "circle" },
+                opacity: { value: 0.5, random: true },
+                size: { value: 3, random: true },
+                line_linked: {
+                    enable: true,
+                    distance: 150,
+                    color: "#8A2BE2",
+                    opacity: 0.4,
+                    width: 1
+                },
+                move: {
+                    enable: true,
+                    speed: 2,
+                    direction: "none",
+                    random: true,
+                    straight: false,
+                    out_mode: "out",
+                    bounce: false
+                }
+            },
+            interactivity: {
+                detect_on: "canvas",
+                events: {
+                    onhover: { enable: true, mode: "repulse" },
+                    onclick: { enable: true, mode: "push" },
+                    resize: true
+                }
+            }
+        });
+
+        // DOM Elements
+        const locationInput = document.getElementById('location-input');
+        const searchBtn = document.getElementById('search-btn');
+        const loading = document.getElementById('loading');
+        const errorMessage = document.getElementById('error-message');
+        
+        // Weather elements
+        const cityName = document.getElementById('city-name');
+        const dateTime = document.getElementById('date-time');
+        const temperature = document.getElementById('temperature');
+        const description = document.getElementById('description');
+        const weatherIcon = document.getElementById('weather-icon');
+        const windSpeed = document.getElementById('wind-speed');
+        const humidity = document.getElementById('humidity');
+        const feelsLike = document.getElementById('feels-like');
+        const pressure = document.getElementById('pressure');
+        const forecastContainer = document.getElementById('forecast-container');
+        
+        // Map elements
+        const mapCity = document.getElementById('map-city');
+        const mapTemp = document.getElementById('map-temp');
+        const mapDesc = document.getElementById('map-desc');
+        const zoomInBtn = document.getElementById('zoom-in');
+        const zoomOutBtn = document.getElementById('zoom-out');
+        const locateMeBtn = document.getElementById('locate-me');
+
+        // Initialize map
+        let map = L.map('weather-map').setView([37.7749, -122.4194], 10);
+        let marker;
+
+        // Add map tiles with a dark theme
+        L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
+            attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors &copy; <a href="https://carto.com/attributions">CARTO</a>',
+            subdomains: 'abcd',
+            maxZoom: 20
+        }).addTo(map);
+
+        // Add initial marker for San Francisco
+        marker = L.marker([37.7749, -122.4194])
+            .addTo(map)
+            .bindPopup('<b>San Francisco</b><br>22°C - Partly Cloudy')
+            .openPopup();
+
+        // Add custom marker style
+        const customIcon = L.divIcon({
+            className: 'custom-marker',
+            iconSize: [20, 20],
+            iconAnchor: [10, 10]
+        });
+
+        // Update date and time
+        function updateDateTime() {
+            const now = new Date();
+            const options = { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' };
+            const dateStr = now.toLocaleDateString('en-US', options);
+            const timeStr = now.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' });
+            dateTime.textContent = `${dateStr} | ${timeStr}`;
+        }
+
+        // Initial date time update
+        updateDateTime();
+        setInterval(updateDateTime, 60000);
+
+        // Generate forecast cards
+        function generateForecast(dailyData) {
+            forecastContainer.innerHTML = '';
+            if (!dailyData || !dailyData.length) {
+                forecastContainer.innerHTML = '<div class="forecast-card">Forecast unavailable.</div>';
+                return;
+            }
+
+            dailyData.forEach(day => {
+                const forecastCard = document.createElement('div');
+                forecastCard.className = 'forecast-card';
+                const displayDay = `${day.dayName}${day.isToday ? ' (Today)' : ''}`;
+                forecastCard.innerHTML = `
+                    <div class="forecast-day">${displayDay}</div>
+                    <i class="fas ${getWeatherIcon(day.code)} forecast-icon"></i>
+                    <div class="forecast-temp">${Math.round(day.maxTemp)}°C</div>
+                    <div class="forecast-sub">Low ${Math.round(day.minTemp)}°C · ${day.pop}% chance</div>
+                `;
+                forecastContainer.appendChild(forecastCard);
+            });
+        }
+
+        function getWeekDates(referenceDate) {
+            const current = new Date(referenceDate);
+            const dayOfWeek = current.getDay();
+            const monday = new Date(current);
+            monday.setDate(current.getDate() - ((dayOfWeek + 6) % 7));
+
+            return Array.from({ length: 7 }, (_, i) => {
+                const d = new Date(monday);
+                d.setDate(monday.getDate() + i);
+                return d.toISOString().split('T')[0];
+            });
+        }
+
+        async function getWeatherData(location) {
+            loading.style.display = 'flex';
+            errorMessage.style.display = 'none';
+
+            try {
+                const geocodeResponse = await fetch(
+                    `https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(location)}&limit=1&addressdetails=1`
+                );
+
+                if (!geocodeResponse.ok) {
+                    throw new Error('Geocoding failed');
+                }
+
+                const results = await geocodeResponse.json();
+                if (!results.length) {
+                    throw new Error('Location not found');
+                }
+
+                const place = results[0];
+                const lat = parseFloat(place.lat);
+                const lng = parseFloat(place.lon);
+                const bbox = place.boundingbox ? [
+                    [parseFloat(place.boundingbox[0]), parseFloat(place.boundingbox[2])],
+                    [parseFloat(place.boundingbox[1]), parseFloat(place.boundingbox[3])]
+                ] : null;
+                const cityLabel = place.address.city || place.address.town || place.address.village || place.address.state || place.address.country || location;
+
+                const weatherResponse = await fetch(
+                    `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lng}` +
+                    `&current_weather=true&daily=weathercode,temperature_2m_max,temperature_2m_min,precipitation_probability_max,windspeed_10m_max` +
+                    `&hourly=relativehumidity_2m,pressure_msl,apparent_temperature&past_days=6&forecast_days=7&timezone=auto&temperature_unit=celsius&windspeed_unit=kmh`
+                );
+
+                if (!weatherResponse.ok) {
+                    throw new Error('Weather fetch failed');
+                }
+
+                const weatherData = await weatherResponse.json();
+                const current = weatherData.current_weather;
+                const daily = weatherData.daily;
+                const hourly = weatherData.hourly;
+
+                const currentHourIndex = hourly.time.indexOf(current.time);
+                const humidityValue = currentHourIndex !== -1 ? `${hourly.relativehumidity_2m[currentHourIndex]}%` : 'N/A';
+                const pressureValue = currentHourIndex !== -1 ? `${Math.round(hourly.pressure_msl[currentHourIndex])} hPa` : 'N/A';
+                const feelsLikeValue = currentHourIndex !== -1 ? `${Math.round(hourly.apparent_temperature[currentHourIndex])}°C` : `${current.temperature}°C`;
+
+                const weekDates = getWeekDates(new Date(current.time));
+                const dailyForecast = weekDates.map(date => {
+                    const idx = daily.time.indexOf(date);
+                    if (idx === -1) {
+                        return null;
+                    }
+                    return {
+                        date,
+                        dayName: new Date(date).toLocaleDateString('en-US', { weekday: 'long' }),
+                        minTemp: daily.temperature_2m_min[idx],
+                        maxTemp: daily.temperature_2m_max[idx],
+                        pop: daily.precipitation_probability_max[idx],
+                        code: daily.weathercode[idx],
+                        isToday: date === current.time.split('T')[0]
+                    };
+                }).filter(Boolean);
+
+                const weather = {
+                    name: cityLabel,
+                    temperature: current.temperature,
+                    description: getWeatherDescription(current.weathercode),
+                    windSpeed: `${current.windspeed.toFixed(1)} km/h`,
+                    humidity: humidityValue,
+                    feelsLike: feelsLikeValue,
+                    pressure: pressureValue,
+                    icon: getWeatherIcon(current.weathercode),
+                    coords: { lat, lng },
+                    bounds: bbox,
+                    forecast: dailyForecast,
+                    currentTime: current.time
+                };
+
+                updateWeatherUI(weather);
+                generateForecast(weather.forecast);
+                updateMap(lat, lng, cityLabel, weather.temperature, weather.description, bbox);
+            } catch (error) {
+                console.error(error);
+                errorMessage.style.display = 'block';
+            } finally {
+                loading.style.display = 'none';
+            }
+        }
+
+        function getWeatherIcon(code) {
+            if (code === 0) return 'fa-sun';
+            if (code === 1 || code === 2) return 'fa-cloud-sun';
+            if (code === 3) return 'fa-cloud';
+            if (code === 45 || code === 48) return 'fa-smog';
+            if ([51, 53, 55, 80, 81, 82].includes(code)) return 'fa-cloud-showers-heavy';
+            if ([56, 57, 66, 67].includes(code)) return 'fa-snowflake';
+            if ([61, 63, 65, 95, 96, 99].includes(code)) return 'fa-cloud-rain';
+            if ([71, 73, 75, 77, 85, 86].includes(code)) return 'fa-snowflake';
+            return 'fa-cloud';
+        }
+
+        function getWeatherDescription(code) {
+            const descriptions = {
+                0: 'Clear Sky',
+                1: 'Mainly Clear',
+                2: 'Partly Cloudy',
+                3: 'Overcast',
+                45: 'Fog',
+                48: 'Depositing Rime Fog',
+                51: 'Light Drizzle',
+                53: 'Moderate Drizzle',
+                55: 'Dense Drizzle',
+                61: 'Slight Rain',
+                63: 'Moderate Rain',
+                65: 'Heavy Rain',
+                66: 'Light Freezing Rain',
+                67: 'Heavy Freezing Rain',
+                71: 'Slight Snow',
+                73: 'Moderate Snow',
+                75: 'Heavy Snow',
+                77: 'Snow Grains',
+                80: 'Rain Showers',
+                81: 'Moderate Rain Showers',
+                82: 'Violent Rain Showers',
+                85: 'Slight Snow Showers',
+                86: 'Heavy Snow Showers',
+                95: 'Thunderstorm',
+                96: 'Thunderstorm with Hail',
+                99: 'Thunderstorm with Heavy Hail'
+            };
+            return descriptions[code] || 'Unknown Weather';
+        }
+
+        // Initial forecast and weather load
+        getWeatherData('San Francisco');
+
+        // Update map with new location
+        function updateMap(lat, lng, city, temp, desc, bounds = null) {
+            // Remove existing marker
+            if (marker) {
+                map.removeLayer(marker);
+            }
+            
+            // Add new marker with custom icon
+            marker = L.marker([lat, lng], {icon: customIcon})
+                .addTo(map)
+                .bindPopup(`<b>${city}</b><br>${temp}°C - ${desc}`)
+                .openPopup();
+            
+            // Update map view with better precision
+            if (bounds) {
+                map.fitBounds(bounds, { maxZoom: 14 });
+            } else {
+                map.setView([lat, lng], 13);
+            }
+            
+            // Update map overlay
+            mapCity.textContent = city;
+            mapTemp.textContent = `${temp}°C`;
+            mapDesc.textContent = desc;
+        }
+
+        function updateWeatherUI(data) {
+            cityName.textContent = data.name;
+            temperature.textContent = data.temperature;
+            description.textContent = data.description;
+            windSpeed.textContent = data.windSpeed;
+            humidity.textContent = data.humidity;
+            feelsLike.textContent = data.feelsLike;
+            pressure.textContent = data.pressure;
+            weatherIcon.className = `fas ${data.icon} weather-icon`;
+            
+            // Add dynamic background based on weather
+            updateBackground(data.description);
+        }
+
+        function updateBackground(description) {
+            const body = document.body;
+            const desc = description.toLowerCase();
+            
+            if (desc.includes('clear') || desc.includes('sunny')) {
+                body.style.background = 'linear-gradient(135deg, #1a2a6c, #b21f1f, #fdbb2d)';
+            } else if (desc.includes('cloud')) {
+                body.style.background = 'linear-gradient(135deg, #3a7bd5, #00d2ff)';
+            } else if (desc.includes('rain')) {
+                body.style.background = 'linear-gradient(135deg, #0f2027, #203a43, #2c5364)';
+            } else if (desc.includes('snow')) {
+                body.style.background = 'linear-gradient(135deg, #8e9eab, #eef2f3)';
+            } else {
+                body.style.background = 'linear-gradient(135deg, var(--dark), #1a1c3d)';
+            }
+        }
+
+        // Event listeners
+        searchBtn.addEventListener('click', () => {
+            const location = locationInput.value.trim();
+            if (location) {
+                getWeatherData(location);
+            }
+        });
+
+        locationInput.addEventListener('keypress', (e) => {
+            if (e.key === 'Enter') {
+                const location = locationInput.value.trim();
+                if (location) {
+                    getWeatherData(location);
+                }
+            }
+        });
+
+        // Map control event listeners
+        zoomInBtn.addEventListener('click', () => {
+            map.zoomIn();
+        });
+
+        zoomOutBtn.addEventListener('click', () => {
+            map.zoomOut();
+        });
+
+        locateMeBtn.addEventListener('click', () => {
+            if (navigator.geolocation) {
+                navigator.geolocation.getCurrentPosition((position) => {
+                    const lat = position.coords.latitude;
+                    const lng = position.coords.longitude;
+                    
+                    // In a real app, you would reverse geocode to get city name
+                    updateMap(lat, lng, 'Your Location', temperature.textContent, description.textContent);
+                    map.setView([lat, lng], 12);
+                });
+            } else {
+                alert('Geolocation is not supported by this browser.');
+            }
+        });
+
+        // Add some interactive effects to cards
+        document.querySelectorAll('.weather-card, .detail-card, .forecast-card').forEach(card => {
+            card.addEventListener('mouseenter', () => {
+                card.style.transform = card.classList.contains('weather-card') 
+                    ? 'translateY(-10px) scale(1.02)' 
+                    : 'scale(1.05)';
+            });
+            
+            card.addEventListener('mouseleave', () => {
+                card.style.transform = 'none';
+            });
+        });
+    </script>
+</body>
+</html>
